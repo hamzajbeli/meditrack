@@ -26,12 +26,6 @@ GitHub Actions, puis les corriger.
 | Analyse de l'image Docker | Trivy, Hadolint | [ ] |
 | DAST | OWASP ZAP | [ ] |
 
-## Résultats : quel outil détecte quelle faille
-| Faille | Détectée par | Corrigée |
-|---|---|---|
-| F1 Injection SQL | [à remplir après exécution] | [ ] |
-| F2 IDOR | [à remplir] | [ ] |
-| F3 Configuration | [à remplir] | [ ] |
 
 ## Feuille de route
 - [x] Application de base
@@ -41,4 +35,4 @@ GitHub Actions, puis les corriger.
 - [ ] Correction des failles et rapport avant/après
 
 ## Auteur
-Hamza Jbeli, [lien LinkedIn]
+Hamza Jbeli
