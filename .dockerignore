@@ -1,0 +1,7 @@
+.git
+.env
+target
+docs
+.idea
+.vscode
+*.md
