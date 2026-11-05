@@ -35,4 +35,5 @@ GitHub Actions, puis les corriger.
 - [ ] Correction des failles et rapport avant/après
 
 ## Auteur
-Hamza Jbeli
+Jebali Hamza
+Jebali Aziz
