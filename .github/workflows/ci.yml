@@ -174,7 +174,7 @@ jobs:
       - name: Arrêter l'application
         if: always()
         run: docker compose down -v
-              - name: Vérifier l'authentification de l'application
+      - name: Vérifier l'authentification de l'application
         env:
           ZAP_USER: ${{ secrets.ZAP_USER }}
           ZAP_PASSWORD: ${{ secrets.ZAP_PASSWORD }}
