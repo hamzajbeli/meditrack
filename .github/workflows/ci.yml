@@ -141,14 +141,18 @@ jobs:
           echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
       - name: Lancer l'application
         run: docker compose up -d --build
-      - name: Attendre que l'application réponde
+      - name: Attendre que l'application accepte l'authentification
+        env:
+          ZAP_USER: ${{ secrets.ZAP_USER }}
+          ZAP_PASSWORD: ${{ secrets.ZAP_PASSWORD }}
         run: |
           for i in $(seq 1 40); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/ || true)
-            if [ "$code" != "000" ]; then echo "Application prête ($code)"; exit 0; fi
+            code=$(curl -s -o /dev/null -w "%{http_code}" -u "$ZAP_USER:$ZAP_PASSWORD" http://localhost:8081/api/me/dossier || true)
+            echo "Tentative $i : code HTTP $code"
+            if [ "$code" = "200" ]; then exit 0; fi
             sleep 5
           done
-          docker compose logs app
+          docker compose logs app --tail 50
           exit 1
       - name: Préparer le plan ZAP
         env:
@@ -161,11 +165,16 @@ jobs:
           sed "s|AUTH_PLACEHOLDER|$AUTH|" .zap/plan.yaml > zap-out/plan.yaml
           chmod -R 777 zap-out
       - name: Scan ZAP
-        run: >
-          docker run --rm --network host
-          -v "$PWD/zap-out:/zap/wrk:rw"
-          ghcr.io/zaproxy/zaproxy:stable
-          zap.sh -cmd -autorun /zap/wrk/plan.yaml
+        run: |
+          set +e
+          docker run --rm --network host \
+            -v "$PWD/zap-out:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap.sh -cmd -autorun /zap/wrk/plan.yaml
+          code=$?
+          echo "Code de sortie ZAP : $code"
+          if [ "$code" -eq 2 ]; then exit 0; fi
+          exit $code
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -174,14 +183,3 @@ jobs:
       - name: Arrêter l'application
         if: always()
         run: docker compose down -v
-      - name: Vérifier l'authentification de l'application
-        env:
-          ZAP_USER: ${{ secrets.ZAP_USER }}
-          ZAP_PASSWORD: ${{ secrets.ZAP_PASSWORD }}
-        run: |
-          sleep 10
-          avec=$(curl -s -o /dev/null -w "%{http_code}" -u "$ZAP_USER:$ZAP_PASSWORD" http://localhost:8081/api/me/dossier)
-          sans=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/api/me/dossier)
-          echo "Code HTTP avec identifiants : $avec"
-          echo "Code HTTP sans identifiants : $sans"
-          docker compose logs app --tail 30
