@@ -43,6 +43,68 @@ jobs:
           cache: maven
       - run: chmod +x mvnw && ./mvnw -B verify
 
+  sonar:
+    name: SAST (SonarCloud)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Analyse Sonar
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          chmod +x mvnw && ./mvnw -B -DskipTests verify
+          org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          -Dsonar.host.url=https://sonarcloud.io
+          -Dsonar.organization=hamzajbeli
+          -Dsonar.projectKey=hamzajbeli_meditrack
+          -Dsonar.qualitygate.wait=true
+
+  dependency-check:
+    name: Dépendances (OWASP Dependency-Check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Restaurer la base de CVE
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/org/owasp/dependency-check-data
+          key: depcheck-${{ github.run_id }}
+          restore-keys: depcheck-
+      - name: Dependency-Check
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: >
+          chmod +x mvnw && ./mvnw -B
+          org.owasp:dependency-check-maven:12.2.2:check
+          -DnvdApiKey=$NVD_API_KEY
+          -DfailBuildOnCVSS=7
+          -DossindexAnalyzerEnabled=false
+          -Dformat=HTML
+      - name: Sauvegarder la base de CVE
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.m2/repository/org/owasp/dependency-check-data
+          key: depcheck-${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapport-dependency-check
+          path: target/dependency-check-report.html
+
   trivy:
     name: Trivy (dépendances et image Docker)
     runs-on: ubuntu-latest
@@ -65,3 +127,50 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
+
+  zap:
+    name: DAST (OWASP ZAP)
+    runs-on: ubuntu-latest
+    needs: [build]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Créer le fichier .env de démonstration
+        run: |
+          echo "DB_USER=${{ secrets.DB_USER }}" > .env
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+      - name: Lancer l'application
+        run: docker compose up -d --build
+      - name: Attendre que l'application réponde
+        run: |
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/ || true)
+            if [ "$code" != "000" ]; then echo "Application prête ($code)"; exit 0; fi
+            sleep 5
+          done
+          docker compose logs app
+          exit 1
+      - name: Préparer le plan ZAP
+        env:
+          ZAP_USER: ${{ secrets.ZAP_USER }}
+          ZAP_PASSWORD: ${{ secrets.ZAP_PASSWORD }}
+        run: |
+          mkdir -p zap-out
+          AUTH=$(printf '%s:%s' "$ZAP_USER" "$ZAP_PASSWORD" | base64 -w0)
+          echo "::add-mask::$AUTH"
+          sed "s|AUTH_PLACEHOLDER|$AUTH|" .zap/plan.yaml > zap-out/plan.yaml
+          chmod -R 777 zap-out
+      - name: Scan ZAP
+        run: >
+          docker run --rm --network host
+          -v "$PWD/zap-out:/zap/wrk:rw"
+          ghcr.io/zaproxy/zaproxy:stable
+          zap.sh -cmd -autorun /zap/wrk/plan.yaml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapport-zap
+          path: zap-out/zap-report.html
+      - name: Arrêter l'application
+        if: always()
+        run: docker compose down -v
