@@ -30,6 +30,8 @@ jobs:
         method: GET
       - url: http://localhost:8081/actuator/env
         method: GET
+      - url: http://localhost:8081/api/me/document?nom=test.txt
+        method: GET
       - url: http://localhost:8081/actuator/mappings
         method: GET
 
