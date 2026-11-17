@@ -174,3 +174,14 @@ jobs:
       - name: Arrêter l'application
         if: always()
         run: docker compose down -v
+              - name: Vérifier l'authentification de l'application
+        env:
+          ZAP_USER: ${{ secrets.ZAP_USER }}
+          ZAP_PASSWORD: ${{ secrets.ZAP_PASSWORD }}
+        run: |
+          sleep 10
+          avec=$(curl -s -o /dev/null -w "%{http_code}" -u "$ZAP_USER:$ZAP_PASSWORD" http://localhost:8081/api/me/dossier)
+          sans=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/api/me/dossier)
+          echo "Code HTTP avec identifiants : $avec"
+          echo "Code HTTP sans identifiants : $sans"
+          docker compose logs app --tail 30
