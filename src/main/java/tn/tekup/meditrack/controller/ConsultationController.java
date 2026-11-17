@@ -34,7 +34,7 @@ public class ConsultationController {
     // F1 - Injection SQL : l'entree est concatenee dans la requete
     @GetMapping("/recherche")
     public List<Map<String, Object>> recherche(@RequestParam String nom) {
-        String sql = "SELECT id, nom, diagnostic FROM dossier_medical WHERE nom LIKE '%" + nom + "%'";
-        return jdbc.queryForList(sql);
+        String sql = "SELECT id, nom, diagnostic FROM dossier_medical WHERE nom LIKE ?";
+        return jdbc.queryForList(sql, "%" + nom + "%");
     }
 }

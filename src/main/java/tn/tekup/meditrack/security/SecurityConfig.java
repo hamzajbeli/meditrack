@@ -21,7 +21,8 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.disable())   // API REST avec Basic Auth
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/dossiers/**").hasAnyRole("MEDECIN", "ADMIN")
                 .requestMatchers("/api/me/**").authenticated()
