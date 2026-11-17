@@ -46,6 +46,27 @@ jobs:
   sonar:
     name: SAST (SonarCloud)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: meditrack
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_password_demo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_user -d meditrack"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/meditrack
+      SPRING_DATASOURCE_USERNAME: ci_user
+      SPRING_DATASOURCE_PASSWORD: ci_password_demo
+      DB_HOST: localhost
+      DB_USER: ci_user
+      DB_PASSWORD: ci_password_demo
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,11 +76,11 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: maven
-      - name: Analyse Sonar
+      - name: Analyse Sonar (tests + couverture JaCoCo)
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: >
-          chmod +x mvnw && ./mvnw -B -DskipTests verify
+          chmod +x mvnw && ./mvnw -B verify
           org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
           -Dsonar.host.url=https://sonarcloud.io
           -Dsonar.organization=hamzajbeli
@@ -111,7 +132,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Scan du dépôt (dépendances et configuration)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scanners: vuln,misconfig
@@ -121,7 +142,7 @@ jobs:
       - name: Build de l'image
         run: docker build -t meditrack:${{ github.sha }} .
       - name: Scan de l'image
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: meditrack:${{ github.sha }}
           severity: CRITICAL,HIGH
@@ -163,11 +184,10 @@ jobs:
           AUTH=$(printf '%s:%s' "$ZAP_USER" "$ZAP_PASSWORD" | base64 -w0)
           echo "::add-mask::$AUTH"
           sed "s|AUTH_PLACEHOLDER|$AUTH|" .zap/plan.yaml > zap-out/plan.yaml
-          chmod -R 777 zap-out
       - name: Scan ZAP
         run: |
           set +e
-          docker run --rm --network host \
+          docker run --rm --network host --user root \
             -v "$PWD/zap-out:/zap/wrk:rw" \
             ghcr.io/zaproxy/zaproxy:stable \
             zap.sh -cmd -autorun /zap/wrk/plan.yaml
